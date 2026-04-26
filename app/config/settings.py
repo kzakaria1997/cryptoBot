@@ -48,7 +48,7 @@ class Settings:
 
     # ML
     ML_MODEL_PATH            = "app/ml/model_oos.pkl"
-    ML_CONFIDENCE_THRESHOLD  = 0.52
+    ML_CONFIDENCE_THRESHOLD  = 0.0   # désactivé — régime filter technique suffit
     ML_MAX_BARS              = 96
 
     # Live trading — PAPER_MODE=false dans Railway pour activer les vrais ordres
