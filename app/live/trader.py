@@ -13,7 +13,6 @@ from app.features.feature_engine import FeatureEngine
 from app.live.kraken_broker import LiveKrakenBroker
 from app.live.reporter import build_report, load_trades, save_trade, send_email
 from app.live.state import TradeState
-from app.ml.predictor import MLPredictor
 from app.strategy.momentum_strategy import MomentumStrategy
 from app.strategy.pullback_strategy import PullbackStrategy
 
@@ -51,12 +50,16 @@ class LiveTrader:
             ("momentum",  MomentumStrategy(Settings.MOMENTUM_PARAMS)),
         ]
 
-        self.predictor: MLPredictor | None = None
-        if os.path.exists(Settings.ML_MODEL_PATH):
-            self.predictor = MLPredictor(model_path=Settings.ML_MODEL_PATH)
-            self._log(f"ML chargé : {Settings.ML_MODEL_PATH}  seuil={Settings.ML_CONFIDENCE_THRESHOLD}")
+        self.predictor = None
+        if Settings.ML_CONFIDENCE_THRESHOLD > 0.0 and os.path.exists(Settings.ML_MODEL_PATH):
+            try:
+                from app.ml.predictor import MLPredictor
+                self.predictor = MLPredictor(model_path=Settings.ML_MODEL_PATH)
+                self._log(f"ML charge : {Settings.ML_MODEL_PATH}  seuil={Settings.ML_CONFIDENCE_THRESHOLD}")
+            except Exception as e:
+                self._log(f"ML non disponible ({e}). Trading sans filtre ML.")
         else:
-            self._log(f"AVERT: ML introuvable ({Settings.ML_MODEL_PATH}). Trading sans filtre ML.")
+            self._log("ML desactive (threshold=0.0). Regime filter actif.")
 
         # Horodatage de démarrage pour le rapport hebdomadaire
         self._start_time = self._load_start_time()
