@@ -1,0 +1,8 @@
+pandas
+numpy
+python-dotenv
+matplotlib
+krakenex
+lightgbm
+scikit-learn
+joblib

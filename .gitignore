@@ -1,0 +1,44 @@
+# Secrets
+.env
+
+# Claude Code internal
+.claude/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Data files (trop lourds pour git)
+app/data/*.csv
+eth_download.log
+
+# Logs et état live
+app/live/trade_log.txt
+app/live/live_output.txt
+app/live/state.json
+
+# Output temporaires
+optimize_output.txt
+optimize_log.txt
+optimize_err.txt
+requirements_check.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
