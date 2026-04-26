@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
@@ -11,10 +11,14 @@ from app.config.settings import Settings
 from app.data.collector import KrakenCollector
 from app.features.feature_engine import FeatureEngine
 from app.live.kraken_broker import LiveKrakenBroker
+from app.live.reporter import build_report, load_trades, save_trade, send_email
 from app.live.state import TradeState
 from app.ml.predictor import MLPredictor
 from app.strategy.momentum_strategy import MomentumStrategy
 from app.strategy.pullback_strategy import PullbackStrategy
+
+REPORT_INTERVAL_DAYS = 7
+START_TIME_FILE = "app/live/start_time.txt"
 
 
 class LiveTrader:
@@ -54,6 +58,11 @@ class LiveTrader:
         else:
             self._log(f"AVERT: ML introuvable ({Settings.ML_MODEL_PATH}). Trading sans filtre ML.")
 
+        # Horodatage de démarrage pour le rapport hebdomadaire
+        self._start_time = self._load_start_time()
+        self._report_sent = False
+        self._log(f"Rapport hebdo prévu le : {(self._start_time + timedelta(days=REPORT_INTERVAL_DAYS)).strftime('%Y-%m-%d %H:%M')} UTC")
+
     # ------------------------------------------------------------------ #
     # Boucle principale
     # ------------------------------------------------------------------ #
@@ -67,6 +76,7 @@ class LiveTrader:
                 time.sleep(wait)
                 for pair in Settings.TRADING_PAIRS:
                     self._tick(pair)
+                self._check_weekly_report()
             except KeyboardInterrupt:
                 self._log("Arrêt manuel.")
                 break
@@ -127,11 +137,24 @@ class LiveTrader:
             self._sell(price, reason, pnl_pct, pair)
 
     def _sell(self, price: float, reason: str, pnl_pct: float, pair: str) -> None:
-        qty   = self.state.position_qty
-        order = self.broker.sell_market(pair, qty, price)
+        qty     = self.state.position_qty
+        order   = self.broker.sell_market(pair, qty, price)
         pnl_usd = qty * price * (1 - Settings.FEE_RATE) - qty * self.state.entry_price
         self._log(f"SELL [{reason}] {pair}  qty={qty:.6f} @ ${price:,.2f}"
                   f"  pnl=${pnl_usd:+.2f} ({pnl_pct*100:+.2f}%)")
+        save_trade({
+            "pair":         pair,
+            "strategy":     self.state.position_pair or "?",
+            "entry_price":  self.state.entry_price,
+            "exit_price":   price,
+            "qty":          qty,
+            "pnl_usd":      round(pnl_usd, 4),
+            "pnl_pct":      round(pnl_pct * 100, 3),
+            "exit_reason":  reason,
+            "entry_time":   self.state.entry_time or "",
+            "exit_time":    datetime.now(timezone.utc).isoformat(),
+            "paper_mode":   Settings.PAPER_MODE,
+        })
         self.state.close_position()
 
     # ------------------------------------------------------------------ #
@@ -202,6 +225,46 @@ class LiveTrader:
         interval = Settings.TIMEFRAME_MINUTES * 60
         elapsed  = (now.minute * 60 + now.second) % interval
         return float((interval - elapsed) + 30)
+
+    # ------------------------------------------------------------------ #
+    # Rapport hebdomadaire
+    # ------------------------------------------------------------------ #
+
+    def _load_start_time(self) -> datetime:
+        os.makedirs(os.path.dirname(START_TIME_FILE), exist_ok=True)
+        if os.path.exists(START_TIME_FILE):
+            with open(START_TIME_FILE) as f:
+                return datetime.fromisoformat(f.read().strip())
+        now = datetime.now(timezone.utc)
+        with open(START_TIME_FILE, "w") as f:
+            f.write(now.isoformat())
+        return now
+
+    def _check_weekly_report(self) -> None:
+        if self._report_sent:
+            return
+        elapsed = datetime.now(timezone.utc) - self._start_time
+        if elapsed < timedelta(days=REPORT_INTERVAL_DAYS):
+            return
+
+        to_email    = Settings.REPORT_EMAIL
+        smtp_email  = Settings.SMTP_EMAIL
+        smtp_pass   = Settings.SMTP_PASSWORD
+        if not to_email or not smtp_email or not smtp_pass:
+            self._log("Rapport hebdo : variables SMTP manquantes, skip.")
+            self._report_sent = True
+            return
+
+        trades = load_trades()
+        report = build_report(trades, REPORT_INTERVAL_DAYS)
+        self._log(f"\n{'='*50}\n{report}\n{'='*50}")
+
+        ok = send_email(report, to_email, smtp_email, smtp_pass)
+        if ok:
+            self._log(f"Rapport hebdo envoyé à {to_email}")
+        else:
+            self._log(f"Echec envoi email — rapport affiché dans les logs ci-dessus.")
+        self._report_sent = True
 
     # ------------------------------------------------------------------ #
     # Logging

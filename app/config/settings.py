@@ -59,3 +59,8 @@ class Settings:
 
     KRAKEN_API_KEY    = os.getenv("KRAKEN_API_KEY", "")
     KRAKEN_API_SECRET = os.getenv("KRAKEN_API_SECRET", "")
+
+    # Rapport hebdomadaire par email
+    REPORT_EMAIL  = os.getenv("REPORT_EMAIL",  "")   # ton adresse de réception
+    SMTP_EMAIL    = os.getenv("SMTP_EMAIL",    "")   # Gmail expéditeur
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")   # App Password Gmail
