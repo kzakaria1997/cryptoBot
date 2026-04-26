@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import json
 import os
-import smtplib
-import ssl
 from datetime import datetime, timezone
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+
+import requests
 
 
 TRADES_FILE = "app/live/paper_trades.json"
@@ -77,20 +75,21 @@ def build_report(trades: list[dict], period_days: int = 7) -> str:
     return "\n".join(lines)
 
 
-def send_email(report: str, to_email: str, smtp_email: str, smtp_password: str) -> bool:
-    subject = f"[CryptoBot] Rapport hebdomadaire paper trading — {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"]    = smtp_email
-    msg["To"]      = to_email
-    msg.attach(MIMEText(report, "plain"))
-
+def send_email(report: str, to_email: str, api_key: str) -> bool:
+    subject = f"[CryptoBot] Rapport hebdomadaire — {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
     try:
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
-            server.login(smtp_email, smtp_password)
-            server.sendmail(smtp_email, to_email, msg.as_string())
+        resp = requests.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "from":    "CryptoBot <onboarding@resend.dev>",
+                "to":      [to_email],
+                "subject": subject,
+                "text":    report,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
         return True
     except Exception as e:
         print(f"[Reporter] Erreur envoi email: {e}", flush=True)

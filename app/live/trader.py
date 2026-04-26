@@ -247,11 +247,10 @@ class LiveTrader:
         if elapsed < timedelta(days=REPORT_INTERVAL_DAYS):
             return
 
-        to_email    = Settings.REPORT_EMAIL
-        smtp_email  = Settings.SMTP_EMAIL
-        smtp_pass   = Settings.SMTP_PASSWORD
-        if not to_email or not smtp_email or not smtp_pass:
-            self._log("Rapport hebdo : variables SMTP manquantes, skip.")
+        to_email = Settings.REPORT_EMAIL
+        api_key  = Settings.RESEND_API_KEY
+        if not to_email or not api_key:
+            self._log("Rapport hebdo : REPORT_EMAIL ou RESEND_API_KEY manquant, skip.")
             self._report_sent = True
             return
 
@@ -259,7 +258,7 @@ class LiveTrader:
         report = build_report(trades, REPORT_INTERVAL_DAYS)
         self._log(f"\n{'='*50}\n{report}\n{'='*50}")
 
-        ok = send_email(report, to_email, smtp_email, smtp_pass)
+        ok = send_email(report, to_email, api_key)
         if ok:
             self._log(f"Rapport hebdo envoyé à {to_email}")
         else:
