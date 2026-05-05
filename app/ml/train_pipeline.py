@@ -9,8 +9,8 @@ from app.features.feature_engine import FeatureEngine
 from app.ml.label_generator import LabelGenerator
 from app.ml.trainer import MLTrainer
 
-TRAIN_END = pd.Timestamp("2025-01-01")   # train 2013 -> fin 2024
-OOS_START = pd.Timestamp("2025-01-01")   # OOS  2025 ->
+TRAIN_END = pd.Timestamp("2025-09-01")   # train 2013 -> aout 2025
+OOS_START = pd.Timestamp("2025-09-01")   # OOS  sept-dec 2025
 
 
 def run_ml_training() -> None:

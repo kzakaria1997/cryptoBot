@@ -22,8 +22,9 @@ class Settings:
     # Paramètres stratégie (backtest-optimisés, trail + regime filter)
     # ------------------------------------------------------------------ #
     STOP_LOSS_PCT      = 0.010   # SL fixe 1% depuis l'entrée
-    TRAIL_STOP_PCT     = 0.250   # trailing stop 25% depuis le peak
-    POSITION_FRACTION  = 0.40    # 40% du portefeuille par trade
+    TRAIL_STOP_PCT     = 0.350   # trailing stop 35% depuis le peak (laisse courir les tendances)
+    POSITION_FRACTION  = 0.40    # base 40% du portefeuille par trade
+    SMART_SIZING       = True    # taille dynamique 40-100% selon qualite du signal
 
     MOMENTUM_PARAMS = {
         "rsi_min":        58,
@@ -39,8 +40,8 @@ class Settings:
         "trend_gap_min":  0.001,
     }
 
-    # Regime filter : évite les marchés baissiers
-    REGIME_RETURN_30D_MIN = -0.03   # return 30j >= -3% pour trader
+    # Regime filter : entre uniquement si tendance 30j positive
+    REGIME_RETURN_30D_MIN = 0.00    # return 30j >= 0% pour trader (evite les bear markets)
 
     # Paires à trader
     TRADING_PAIRS = ["XXBTZUSD", "XETHZUSD"]   # BTC + ETH

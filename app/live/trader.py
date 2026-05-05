@@ -32,8 +32,9 @@ class LiveTrader:
     def __init__(self):
         mode_label = "PAPER" if Settings.PAPER_MODE else "LIVE"
         self._log(f"=== LiveTrader ({mode_label}) ===")
+        sizing_label = f"smart(40-100%)" if Settings.SMART_SIZING else f"{Settings.POSITION_FRACTION*100:.0f}%"
         self._log(f"SL={Settings.STOP_LOSS_PCT*100:.1f}%  Trail={Settings.TRAIL_STOP_PCT*100:.0f}%  "
-                  f"Sizing={Settings.POSITION_FRACTION*100:.0f}%  "
+                  f"Sizing={sizing_label}  Regime>=return_30d{Settings.REGIME_RETURN_30D_MIN*100:.0f}%  "
                   f"Pairs={Settings.TRADING_PAIRS}")
 
         self.state     = TradeState(Settings.LIVE_STATE_FILE)
@@ -169,8 +170,19 @@ class LiveTrader:
         r30 = row.get("return_30d", None)
         if r30 is not None and not pd.isna(r30):
             if float(r30) < Settings.REGIME_RETURN_30D_MIN:
-                self._log(f"  Régime baissier (return_30d={r30*100:.1f}%), skip.")
+                self._log(f"  Regime baissier (return_30d={r30*100:.1f}%), skip.")
                 return
+
+        # Log diagnostic de tendance (EMA50 vs EMA200)
+        ema_t = row.get("ema_trend")
+        ema_b = row.get("ema_base")
+        rsi   = row.get("rsi")
+        rvol  = row.get("rel_volume")
+        if ema_t is not None and ema_b is not None and not pd.isna(ema_t) and not pd.isna(ema_b):
+            gap_pct  = (float(ema_t) - float(ema_b)) / float(ema_b) * 100
+            trend_ok = float(ema_t) > float(ema_b)
+            extra    = f"  RSI={float(rsi):.1f}  RelVol={float(rvol):.2f}" if (rsi is not None and rvol is not None and not pd.isna(rsi) and not pd.isna(rvol)) else ""
+            self._log(f"  Trend EMA50/EMA200: {'OK' if trend_ok else 'NON'} (gap={gap_pct:+.3f}%){extra}")
 
         # Cherche un signal dans l'ordre de priorité
         for name, strategy in self.strategies:
@@ -184,15 +196,33 @@ class LiveTrader:
                 ml_score = self.predictor.predict_proba(row)
                 self._log(f"  Signal {name} | ML={ml_score:.3f} (seuil={Settings.ML_CONFIDENCE_THRESHOLD})")
                 if ml_score < Settings.ML_CONFIDENCE_THRESHOLD:
-                    self._log(f"  -> Rejeté ML.")
+                    self._log(f"  -> Rejete ML.")
                     continue
 
-            self._buy(price, pair, name)
+            self._buy(price, pair, name, row=row)
             return   # un seul trade par tick
 
-    def _buy(self, price: float, pair: str, strategy_name: str) -> None:
-        cash       = self.state.available_cash
-        trade_size = cash * Settings.POSITION_FRACTION
+    @staticmethod
+    def _smart_fraction(row: pd.Series) -> float:
+        fraction = Settings.POSITION_FRACTION  # base 40%
+        gap = row.get("trend_gap_pct")
+        if gap is not None and not pd.isna(gap) and float(gap) >= 0.005:
+            fraction += 0.20
+        r30 = row.get("return_30d")
+        if r30 is not None and not pd.isna(r30) and float(r30) >= 0.10:
+            fraction += 0.20
+        rvol = row.get("rel_volume")
+        if rvol is not None and not pd.isna(rvol) and float(rvol) >= 1.5:
+            fraction += 0.20
+        return min(fraction, 1.0)
+
+    def _buy(self, price: float, pair: str, strategy_name: str, row: pd.Series | None = None) -> None:
+        cash = self.state.available_cash
+        if Settings.SMART_SIZING and row is not None:
+            fraction = self._smart_fraction(row)
+        else:
+            fraction = Settings.POSITION_FRACTION
+        trade_size = cash * fraction
         if trade_size < 10.0:
             self._log(f"  Cash insuffisant (${cash:.2f}), skip.")
             return
@@ -200,7 +230,7 @@ class LiveTrader:
         self.broker.buy_market(pair, trade_size, price)
         self.state.open_position(price, qty, pair=pair, cash_used=trade_size)
         self._log(f"BUY [{strategy_name}] {pair}  qty={qty:.6f} @ ${price:,.2f}"
-                  f"  size=${trade_size:.2f}  ({Settings.POSITION_FRACTION*100:.0f}% du cash)")
+                  f"  size=${trade_size:.2f}  ({fraction*100:.0f}% du cash)")
 
     # ------------------------------------------------------------------ #
     # Data
